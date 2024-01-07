@@ -1,13 +1,58 @@
+import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Row, Col, ListGroup, Image, Form, Button, Card } from 'react-bootstrap';
+import { Row, Col, ListGroup, Image, Card, Button } from 'react-bootstrap';
+import { useSelector } from 'react-redux';
+import { toast } from 'react-toastify';
 import Message from '../components/Message';
 import Loader from '../components/Loader';
-import { useGetOrdersDetailsQuery } from '../slices/ordersApiSlice';
+import { PayPalButtons, usePayPalScriptReducer } from '@paypal/react-paypal-js';
+import { useGetOrdersDetailsQuery, usePayOrderMutation, useGetPayPalClientIdQuery } from '../slices/ordersApiSlice';
+import { combineSlices } from '@reduxjs/toolkit';
 
 const OrderScreen = () => {
     const { id: orderId } = useParams();
 
     const { data: order, refetch, isLoading, error } = useGetOrdersDetailsQuery(orderId);
+
+    const [payOrder, { isLoading: loadingPay }] = usePayOrderMutation();
+
+    const { userInfo } = useSelector((state) => state.auth);
+
+    const [{ isPending }, paypalDispatch] = usePayPalScriptReducer();
+
+    const {
+        data: paypal,
+        isLoading: loadingPayPal,
+        error: errorPayPal,
+      } = useGetPayPalClientIdQuery();
+
+      console.log(paypal)
+    
+      useEffect(() => {
+        if (!errorPayPal && !loadingPayPal && paypal.clientId) {
+          const loadPaypalScript = async () => {
+            paypalDispatch({
+              type: 'resetOptions',
+              value: {
+                'clientId': paypal.clientId,
+                currency: 'USD',
+              },
+            });
+            paypalDispatch({ type: 'setLoadingStatus', value: 'pending' });
+          };
+          if (order && !order.isPaid) {
+            if (!window.paypal) {
+              loadPaypalScript();
+              console.log('radi');
+            }
+          }
+        }
+      }, [errorPayPal, loadingPayPal, order, paypal, paypalDispatch]);
+
+    function onApprove() {}
+    function onApproveTest() {}
+    function onError() {}
+    function createOrder() {}
 
     return isLoading ? <Loader /> : error ? <Message variant='danger'>{error}</Message> : (
         <>
@@ -109,18 +154,23 @@ const OrderScreen = () => {
                                     <Col>${order.totalPrice}</Col>
                                 </Row>
                             </ListGroup.Item>
-                            {/* <ListGroup.Item>
-                                {error && <Message variant='danger'>{error}</Message>}
-                            </ListGroup.Item>
-                            <ListGroup.Item>
-                                <Button
-                                    type='button'
-                                    className='btn-block'
-                                    disabled={order.isPaid}
-                                >
-                                    Pay Now
-                                </Button>
-                            </ListGroup.Item> */}
+                            {!order.isPaid && (
+                                <ListGroup.Item>
+                                    {loadingPay && <Loader />}
+                                    {isPending ? <Loader /> : (
+                                        <div>
+                                            <Button onClick={ onApproveTest } style={{marginBottom: '10px'}}>Test Pay Order</Button>
+                                            <div>
+                                                <PayPalButtons
+                                                    createOrder={createOrder}
+                                                    onApprove={onApprove}
+                                                    onError={onError}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </ListGroup.Item>
+                            )}
                         </ListGroup>
                     </Card>
                 </Col>
